@@ -77,3 +77,7 @@ variance = sum_squared_diff / total_pixels
 # 输出结果
 print("Mean:", mean)  # 每个通道的均值 [R_mean, G_mean, B_mean]
 print("Variance:", variance)  # 每个通道的方差 [R_var, G_var, B_var]
+
+# 保存结果
+np.save('mean.npy', mean)
+np.save('variance.npy', variance)

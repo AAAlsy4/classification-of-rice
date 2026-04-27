@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from model import ResNet18,Residual
 import time  # 时间模块，用于计算训练时间
 import pandas as pd  # 数据处理库，用于保存训练过程数据
+import numpy as np
 
 
 def train_val_data_process():
@@ -28,8 +29,11 @@ def train_val_data_process():
     ROOT_TRAIN = r'data/train'
 
     # 数据集归一化
-    normalize = transforms.Normalize(mean=[0.042, 0.043, 0.044],
-                                     std=[0.033, 0.034, 0.036])
+    # 从.npy加载
+    mean = np.load('mean.npy')
+    std = np.load('std.npy')
+    normalize = transforms.Normalize(mean=mean, std=std)
+
 
     # 定义数据预处理变换序列
     # transforms.Compose用于将多个数据预处理操作组合在一起
