@@ -1,0 +1,19 @@
+name: rice
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - pytorch=1.13.1
+  - torchvision=0.14.1
+  - cudatoolkit=11.7  # 若用 CPU 则替换为 cpuonly
+  - numpy
+  - pandas
+  - pillow
+  - tqdm
+  - tensorboard
+  - matplotlib
+  - pip
+  - pip:
+    - torchsummary

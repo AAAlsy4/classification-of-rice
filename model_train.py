@@ -9,9 +9,12 @@ from model import ResNet18,Residual
 import time  # 时间模块，用于计算训练时间
 import pandas as pd  # 数据处理库，用于保存训练过程数据
 import numpy as np
+from tqdm import tqdm
+import argparse  # 命令行参数解析库
+from torch.utils.tensorboard import SummaryWriter
 
 
-def train_val_data_process():
+def train_val_data_process(batch_size, num_workers, data_dir):
     """
         训练集和验证集数据处理函数
 
@@ -25,11 +28,8 @@ def train_val_data_process():
         train_dataloader: 训练数据加载器
         val_dataloader: 验证数据加载器
     """
-    # 定义数据集路径
-    ROOT_TRAIN = r'data/train'
 
     # 数据集归一化
-    # 从.npy加载
     mean = np.load('mean.npy')
     std = np.load('std.npy')
     normalize = transforms.Normalize(mean=mean, std=std)
@@ -54,7 +54,7 @@ def train_val_data_process():
     # ImageFolder会自动根据文件夹结构创建标签，每个子文件夹代表一个类别
     # root: 数据集根目录路径
     # transform: 应用于每个图像的数据预处理变换
-    train_data = ImageFolder(root=ROOT_TRAIN, transform=train_transforms)
+    train_data = ImageFolder(root=data_dir, transform=train_transforms)
 
     # 将训练数据集按8:2的比例随机划分为训练集和验证集
     # random_split函数将数据集随机分割成指定大小的子集
@@ -64,20 +64,20 @@ def train_val_data_process():
 
     # 创建训练数据加载器
     train_dataloader = Data.DataLoader(dataset=train_data,  # 训练数据集
-                                       batch_size=128,  # 每批处理128个样本，批量大小影响训练速度和内存使用
+                                       batch_size=batch_size,  # 每批处理batch_size个样本，批量大小影响训练速度和内存使用
                                        shuffle=True,  # 打乱数据顺序，防止模型学习到数据顺序特征
-                                       num_workers=8)  # 使用8个子进程加载数据，加速数据读取
+                                       num_workers=num_workers)  # 使用num_workers个子进程加载数据，加速数据读取
 
     # 创建验证数据加载器
     val_dataloader = Data.DataLoader(dataset=val_data,  # 验证数据集
-                                     batch_size=128,  # 每批处理128个样本，与训练集保持一致
+                                     batch_size=batch_size,  # 每批处理batch_size个样本，与训练集保持一致
                                      shuffle=True,  # 打乱数据顺序，确保评估的随机性
-                                     num_workers=8)  # 使用8个子进程加载数据
+                                     num_workers=num_workers)  # 使用num_workers个子进程加载数据
 
     return train_dataloader, val_dataloader
 
 
-def train_model_process(model, train_dataloader, val_dataloader, num_epochs):
+def train_model_process(model, train_dataloader, val_dataloader, num_epochs, learning_rate):
     """
     模型训练和验证函数
 
@@ -103,7 +103,7 @@ def train_model_process(model, train_dataloader, val_dataloader, num_epochs):
 
     # 定义优化器：使用Adam优化算法，学习率为0.001
     # Adam优化器结合了动量法和自适应学习率的优点，适合大多数深度学习任务
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     # 定义损失函数：交叉熵损失，适用于多分类问题
     # 交叉熵损失函数衡量模型预测概率分布与真实标签分布的差异
@@ -112,6 +112,8 @@ def train_model_process(model, train_dataloader, val_dataloader, num_epochs):
     # 将模型移动到指定设备（GPU或CPU）
     # 如果使用GPU，可以显著加速模型计算
     model = model.to(device)
+
+    writer = SummaryWriter(log_dir='./tensorboard')  # 创建TensorBoard SummaryWriter实例，用于记录训练过程数据
 
     # 深度复制当前模型权重，用于保存最佳模型
     # copy.deepcopy确保完全独立复制，避免后续修改影响原始状态
@@ -141,7 +143,7 @@ def train_model_process(model, train_dataloader, val_dataloader, num_epochs):
 
         # 训练阶段：遍历训练数据加载器中的所有批次
         # enumerate提供批次索引和批次数据，便于调试和监控
-        for step, (b_x, b_y) in enumerate(train_dataloader):
+        for step, (b_x, b_y) in tqdm(enumerate(train_dataloader), total=len(train_dataloader)):
             # 将当前批次的输入数据(b_x)和标签(b_y)移动到指定设备（GPU/CPU）
             b_x = b_x.to(device)
             b_y = b_y.to(device)
@@ -164,16 +166,20 @@ def train_model_process(model, train_dataloader, val_dataloader, num_epochs):
 
             # 累计训练损失（乘以batch_size是因为损失是batch的平均值，需要还原为总和）
             train_loss += loss.item() * b_x.size(0)
+            writer.add_scalar('Loss/train', loss.item(), epoch)  # 将当前批次的训练损失记录到TensorBoard
+            
             # loss.item()获取标量损失值，b_x.size(0)是当前批次的样本数量
 
             # 统计正确预测的数量，pre_lab == b_y.data比较预测标签和真实标签
             train_corrects += torch.sum(pre_lab == b_y.data)
+            
             # 统计已处理的训练样本总数，用于计算平均损失和准确率
             train_num += b_x.size(0)
+            writer.add_scalar('Acc/train', train_corrects.double().item() / train_num, epoch) # 将当前批次的训练准确率记录到TensorBoard
 
         # 验证阶段：遍历验证数据加载器中的所有批次
         # 验证阶段不更新模型参数，只进行前向传播计算损失和准确率
-        for step, (b_x, b_y) in enumerate(val_dataloader):
+        for step, (b_x, b_y) in tqdm(enumerate(val_dataloader), total=len(val_dataloader)):
             # 将验证数据移动到指定设备
             b_x = b_x.to(device)
             b_y = b_y.to(device)
@@ -187,10 +193,12 @@ def train_model_process(model, train_dataloader, val_dataloader, num_epochs):
 
             # 累计验证损失
             val_loss += loss.item() * b_x.size(0)
+            writer.add_scalar('Loss/val', loss.item(), epoch)  # 将当前批次的验证损失记录到TensorBoard
             # 统计正确预测的数量
             val_corrects += torch.sum(pre_lab == b_y.data)
             # 统计已处理的验证样本总数
             val_num += b_x.size(0)
+            writer.add_scalar('Acc/val', val_corrects.double().item() / val_num, epoch) # 将当前批次的验证准确率记录到TensorBoard
 
         # 计算并记录当前epoch的平均训练损失和准确率
         train_loss_list.append(train_loss / train_num)  # 平均训练损失 = 总损失 / 样本数
@@ -209,6 +217,7 @@ def train_model_process(model, train_dataloader, val_dataloader, num_epochs):
         if val_acc_list[-1] > best_acc:
             best_acc = val_acc_list[-1]  # 更新最佳准确率
             best_model_wts = copy.deepcopy(model.state_dict())  # 深度复制当前模型权重
+            print('Best model updated at epoch {} with val acc: {:.4f}'.format(epoch + 1, best_acc))  # 打印更新最佳模型的信息
 
         # 计算并打印已用时间
         time_use = time.time() - since  # 计算从训练开始到现在的时间差
@@ -216,6 +225,9 @@ def train_model_process(model, train_dataloader, val_dataloader, num_epochs):
 
     # 保存最佳模型权重（验证集上表现最好的模型）到文件，便于后续使用或部署
     torch.save(best_model_wts, 'model_best.pth')
+    print('Best model saved to ./model_best.pth')  # 打印保存最佳模型的提示信息
+
+    print('Best Val Acc: {:4f}'.format(best_acc))  # 打印最佳验证准确率
 
     # 将训练过程数据整理为DataFrame，便于分析和可视化
     train_process = pd.DataFrame(data={'epoch': range(num_epochs),  # epoch编号
@@ -257,11 +269,33 @@ def matplot_acc_loss(train_process):
     plt.legend()  # 显示图例
     plt.xlabel('Epoch')  # x轴标签
     plt.ylabel('Acc')  # y轴标签
+    plt.savefig('train_process.png')  # 保存图形到文件，便于后续查看
+    print('saved to ./train_process.png')  # 打印提示信息
     plt.show()  # 显示图形
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Train ResNet")
+
+    parser.add_argument('--epochs', type=int, default=20, help='Number of epochs to train')
+    parser.add_argument('--batch_size', type=int, default=128, help='Batch size for training')
+    parser.add_argument('--num_workers', type=int, default=8, help='Number of workers for data loading')
+    parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate for optimizer')
+    parser.add_argument('--data_dir', type=str, default='./data/train', help='Directory containing training data')
+    parser.add_argument('--visualize', action='store_true', help='Whether to visualize training process')
+
+    return parser.parse_args()
+
 if __name__ == '__main__':
+    # 解析命令行参数
+    args = parse_args()
+
     # 将模型实例化
+    print('实例化模型')
     model = ResNet18(Residual)
-    train_dataloader, val_dataloader = train_val_data_process()
-    train_process = train_model_process(model, train_dataloader, val_dataloader,20)
-    matplot_acc_loss(train_process)
+    print('数据处理')
+    train_dataloader, val_dataloader = train_val_data_process(args.batch_size, args.num_workers, args.data_dir)
+    print('开始训练')
+    train_process = train_model_process(model, train_dataloader, val_dataloader, args.epochs, args.learning_rate)
+    if args.visualize:
+        print('可视化训练过程')
+        matplot_acc_loss(train_process)

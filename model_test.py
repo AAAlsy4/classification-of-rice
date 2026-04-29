@@ -4,9 +4,14 @@ from torchvision import transforms  # 图像预处理变换
 from model import ResNet18,Residual
 from torchvision.datasets import ImageFolder # 图片加载
 from PIL import Image
+from tqdm import tqdm
+import numpy as np
+import argparse  # 命令行参数解析库
+import warnings
+warnings.filterwarnings("ignore", message="You are using `torch.load` with `weights_only=False`")
 
 
-def test_data_process():
+def test_data_process(data_dir):
     """
         测试集数据处理函数
 
@@ -20,12 +25,11 @@ def test_data_process():
         train_dataloader: 训练数据加载器
         val_dataloader: 验证数据加载器
     """
-    # 定义数据集路径
-    ROOT_TEST = r'data/test'
 
     # 数据集归一化
-    normalize = transforms.Normalize(mean=[0.042, 0.043, 0.044],
-                                     std=[0.033, 0.034, 0.036])
+    mean = np.load('mean.npy')
+    std = np.load('std.npy')
+    normalize = transforms.Normalize(mean=mean,std=std)
 
     # 定义数据预处理变换序列
     # transforms.Compose用于将多个数据预处理操作组合在一起
@@ -46,7 +50,7 @@ def test_data_process():
     # ImageFolder会自动根据文件夹结构创建标签，每个子文件夹代表一个类别
     # root: 数据集根目录路径
     # transform: 应用于每个图像的数据预处理变换
-    test_data = ImageFolder(root=ROOT_TEST, transform=test_transforms)
+    test_data = ImageFolder(root=data_dir, transform=test_transforms)
 
     # 创建测试数据加载器
     test_dataloader = Data.DataLoader(dataset=test_data,  # 测试数据集
@@ -87,12 +91,14 @@ def test_model_process(model, test_dataloader):
 
     num = 1
     classes = ['Arborio','Basmati','Ipsala','Jasmine','Karacadag']
+    inference_predict = []
+    inference_real = []
 
     # 使用torch.no_grad()上下文管理器，禁用梯度计算
     # 在测试阶段不需要计算梯度，可以节省内存和计算资源
     with torch.no_grad():
         # 遍历测试数据加载器中的所有样本
-        for test_data_x, test_data_y in test_dataloader:
+        for test_data_x, test_data_y in tqdm(test_dataloader, total=len(test_dataloader)):
             # 将当前测试样本的输入数据和标签移动到指定设备
             test_data_x = test_data_x.to(device)
             test_data_y = test_data_y.to(device)
@@ -117,9 +123,10 @@ def test_model_process(model, test_dataloader):
             # 测试集推理
             result = pre_lab.item()
             label = test_data_y.item()
-            if num <= 100:
+            if num <= 10:
                 num += 1
-                print("predict:", classes[result], "    real:", classes[label])
+                inference_predict.append(classes[result])
+                inference_real.append(classes[label])
 
     # 计算测试准确率：正确预测数 / 总样本数
     # .double()确保使用双精度计算，提高计算精度
@@ -127,31 +134,54 @@ def test_model_process(model, test_dataloader):
 
     # 打印测试准确率，格式化为4位小数
     print('Test Acc: {:.4f}'.format(test_acc))
+    for i in range(len(inference_predict)):
+        print('Predict:',inference_predict[i],' Real:',inference_real[i])
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Test ResNet')
+
+    parser.add_argument('--data_dir', type=str, default='./data/test', help='Directory containing test data')
+    parser.add_argument('--pth_file', type=str, default='./model_best.pth', help='Path to the trained model file')
+    parser.add_argument('--inference', action='store_true', help='Whether to perform inference on a single image')
+    parser.add_argument('--image_path', type=str, default='./data/train/Arborio/Arborio (1).jpg', help='Path to the image for inference')
+
+    return parser.parse_args()
 
 
 if __name__ == '__main__':
+    args = parse_args()
+
     # 将模型实例化
+    print('实例化模型')
     model = ResNet18(Residual)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model.load_state_dict(torch.load('model_best.pth',map_location=device))
-    test_dataloader = test_data_process()
+    print('加载模型权重')
+    model.load_state_dict(torch.load(args.pth_file, map_location=device))
+    print('处理测试数据')
+    test_dataloader = test_data_process(args.data_dir)
 
     model = model.to(device)
 
+    print('开始测试')
     test_model_process(model, test_dataloader)
 
     # 测试单张图片
-    img = Image.open('data/train/Arborio/Arborio (1).jpg')
-    normalize = transforms.Normalize(mean=[0.162, 0.151, 0.138],std=[0.058, 0.052, 0.048])
-    test_transforms = transforms.Compose([transforms.Resize((224, 224)),transforms.ToTensor(),normalize])
-    img = test_transforms(img)
-    img = img.to(device)
+    if args.inference:
+        print('单张图片推理')
+        img = Image.open(args.image_path)
+        mean = np.load('mean.npy')
+        std = np.load('std.npy')
+        normalize = transforms.Normalize(mean=mean, std=std)
+        test_transforms = transforms.Compose([transforms.Resize((224, 224)),transforms.ToTensor(),normalize])
+        img = test_transforms(img)
+        img = img.to(device)
 
-    # 将图片放入张量, 并增加一个维度，使其符合输入要求
-    img = img.unsqueeze(0)
-    with torch.no_grad():
-        model.eval()
-        output = model(img)
-        pre_lab = torch.argmax(output, dim=1)
-        classes = ['Arborio','Basmati','Ipsala','Jasmine','Karacadag']
-        print(classes[pre_lab.item()])
+        # 将图片放入张量, 并增加一个维度，使其符合输入要求
+        img = img.unsqueeze(0)
+        with torch.no_grad():
+            model.eval()
+            output = model(img)
+            pre_lab = torch.argmax(output, dim=1)
+            classes = ['Arborio','Basmati','Ipsala','Jasmine','Karacadag']
+            print(classes[pre_lab.item()])
