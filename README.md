@@ -1,6 +1,6 @@
 # classification-of-rice
 
-基于 ResNet18 骨干网络的图像分类模型，在Rice-Image-Dataset数据集上训练，提供预训练权重model_best.pth。
+基于 ResNet18 骨干网络的稻米图像分类模型，在Rice-Image-Dataset数据集上训练，提供预训练权重model_best.pth。
 
 ## 数据集介绍
 
@@ -20,7 +20,9 @@
 
 ![训练过程损失与准确率曲线](./figs/train_process.jpg)
 
-实际准确率在99.0%-99.5%之间
+最优准确率在99.0%-99.5%之间
+
+训练环境：Ubuntu操作系统，GPU nvidia 3090
 
 ## 使用
 
