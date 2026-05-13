@@ -1,6 +1,8 @@
 # classification-of-rice
 
-基于 ResNet18 骨干网络的稻米图像分类模型，在Rice-Image-Dataset数据集上训练，提供预训练权重model_best.pth。
+基于 ResNet18 和 ViT 骨干网络的图像分类模型，在Rice-Image-Dataset数据集上训练。
+
+![ViT](./figs/ViT.jpg) ViT
 
 ## 数据集介绍
 
@@ -18,11 +20,19 @@
 
 ## 测试结果
 
-![训练过程损失与准确率曲线](./figs/train_process.jpg)
-
-最优准确率在99.0%-99.5%之间
-
 训练环境：Ubuntu操作系统，GPU nvidia 3090
+
+### ResNet
+
+![训练过程损失与准确率曲线](./figs/train_process_ResNet.jpg)
+
+实际准确率在99.5%以上
+
+### ViT
+
+![训练过程损失与准确率曲线](./figs/train_process_ViT.jpg)
+
+实际准确率在70%-75%之间
 
 ## 使用
 
@@ -34,8 +44,6 @@ cd ./classification-of-rice
 ```
 
 下载数据集[Rice-Image-Dataset](https://pan.baidu.com/s/1hUcjG1Z34-1FHOy9Y1mX4w?pwd=42s2)
-
-下载预训练权重(可选)[model_best.pth](https://pan.baidu.com/s/1s6ZwKulsGCNOa77650rhcg?pwd=yewf)
 
 ### 环境配置
 
@@ -61,7 +69,10 @@ python mean_std.py
 ### 训练
 
 ```bash
-python model_train.py --epochs 20 --batch_size 128 --num_workers 8 --learning_rate 0.001 --data_dir ./data/train --visualize
+# 训练ResNet模型
+python model_train.py --model ResNet --epochs 20 --batch_size 128 --num_workers 8 --learning_rate 0.001 --data_dir ./data/train --visualize
+# 训练ViT模型
+python model_train.py --model ViT --epochs 20 --batch_size 128 --num_workers 8 --learning_rate 0.001 --data_dir ./data/train --visualize
 ```
 
 --visualize 是否将可视化结果保存为图片
@@ -69,7 +80,10 @@ python model_train.py --epochs 20 --batch_size 128 --num_workers 8 --learning_ra
 ### 推理
 
 ```bash
-python model_test.py --data_dir ./data/test --pth_file ./model_best.pth --inference --image_path ./Arborio.jpg
+# 验证ResNet模型
+python model_test.py --model ResNet --data_dir ./data/test --pth_file ./model_best_ResNet.pth --inference --image_path ./Ipsala.jpg
+# 验证ViT模型
+python model_test.py --model ViT --data_dir ./data/test --pth_file ./model_best_ViT.pth --inference --image_path ./Ipsala.jpg
 ```
 
 --inference 是否进行单张图片推理
@@ -79,5 +93,8 @@ python model_test.py --data_dir ./data/test --pth_file ./model_best.pth --infere
 ### 使用tensorboard
 
 ```bash
-tensorboard --logdir ./tensorboard
+# ResNet模型训练曲线
+tensorboard --logdir ./tensorboard_ResNet
+# ViT模型训练曲线
+tensorboard --logdir ./tensorboard_ViT
 ```
