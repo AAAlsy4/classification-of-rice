@@ -269,8 +269,8 @@ def matplot_acc_loss(train_process):
     plt.legend()  # 显示图例
     plt.xlabel('Epoch')  # x轴标签
     plt.ylabel('Acc')  # y轴标签
-    plt.savefig(f'train_process_{args.model}.png')  # 保存图形到文件，便于后续查看
-    print(f'saved to ./train_process_{args.model}.png')  # 打印提示信息
+    plt.savefig(f'train_process_{args.model}.jpg')  # 保存图形到文件，便于后续查看
+    print(f'saved to ./train_process_{args.model}.jpg')  # 打印提示信息
     plt.show()  # 显示图形
 
 def parse_args():
