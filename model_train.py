@@ -5,7 +5,7 @@ from torchvision import transforms  # 图像预处理变换
 from torchvision.datasets import ImageFolder # 图片加载
 import torch.utils.data as Data  # 数据加载工具
 import matplotlib.pyplot as plt
-from model import ResNet18,Residual
+from model import ResNet18,Residual,ViT
 import time  # 时间模块，用于计算训练时间
 import pandas as pd  # 数据处理库，用于保存训练过程数据
 import numpy as np
@@ -113,7 +113,7 @@ def train_model_process(model, train_dataloader, val_dataloader, num_epochs, lea
     # 如果使用GPU，可以显著加速模型计算
     model = model.to(device)
 
-    writer = SummaryWriter(log_dir='./tensorboard')  # 创建TensorBoard SummaryWriter实例，用于记录训练过程数据
+    writer = SummaryWriter(log_dir=f'./tensorboard_{args.model}')  # 创建TensorBoard SummaryWriter实例，用于记录训练过程数据
 
     # 深度复制当前模型权重，用于保存最佳模型
     # copy.deepcopy确保完全独立复制，避免后续修改影响原始状态
@@ -224,8 +224,8 @@ def train_model_process(model, train_dataloader, val_dataloader, num_epochs, lea
         print('Time use:{:.0f}m {:.0f}s'.format(time_use // 60, time_use % 60))  # 格式化为分钟和秒
 
     # 保存最佳模型权重（验证集上表现最好的模型）到文件，便于后续使用或部署
-    torch.save(best_model_wts, 'model_best.pth')
-    print('Best model saved to ./model_best.pth')  # 打印保存最佳模型的提示信息
+    torch.save(best_model_wts, f'model_best_{args.model}.pth')
+    print(f'Best model saved to ./model_best_{args.model}.pth')  # 打印保存最佳模型的提示信息
 
     print('Best Val Acc: {:4f}'.format(best_acc))  # 打印最佳验证准确率
 
@@ -269,13 +269,14 @@ def matplot_acc_loss(train_process):
     plt.legend()  # 显示图例
     plt.xlabel('Epoch')  # x轴标签
     plt.ylabel('Acc')  # y轴标签
-    plt.savefig('train_process.png')  # 保存图形到文件，便于后续查看
-    print('saved to ./train_process.png')  # 打印提示信息
+    plt.savefig(f'train_process_{args.model}.png')  # 保存图形到文件，便于后续查看
+    print(f'saved to ./train_process_{args.model}.png')  # 打印提示信息
     plt.show()  # 显示图形
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train ResNet")
+    parser = argparse.ArgumentParser(description="Train")
 
+    parser.add_argument('--model', type=str, default='ResNet', choices=['ResNet', 'ViT'], help='Model architecture to train (default: ResNet)')
     parser.add_argument('--epochs', type=int, default=20, help='Number of epochs to train')
     parser.add_argument('--batch_size', type=int, default=128, help='Batch size for training')
     parser.add_argument('--num_workers', type=int, default=8, help='Number of workers for data loading')
@@ -290,8 +291,11 @@ if __name__ == '__main__':
     args = parse_args()
 
     # 将模型实例化
-    print('实例化模型')
-    model = ResNet18(Residual)
+    print(f'实例化模型: {args.model}')
+    if args.model == 'ResNet':
+        model = ResNet18(Residual)
+    else:
+        model = ViT()
     print('数据处理')
     train_dataloader, val_dataloader = train_val_data_process(args.batch_size, args.num_workers, args.data_dir)
     print('开始训练')

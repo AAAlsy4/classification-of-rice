@@ -1,7 +1,7 @@
 import torch
 import torch.utils.data as Data  # 数据加载工具
 from torchvision import transforms  # 图像预处理变换
-from model import ResNet18,Residual
+from model import ResNet18,Residual,ViT  
 from torchvision.datasets import ImageFolder # 图片加载
 from PIL import Image
 from tqdm import tqdm
@@ -139,12 +139,13 @@ def test_model_process(model, test_dataloader):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Test ResNet')
+    parser = argparse.ArgumentParser(description='Test')
 
+    parser.add_argument('--model', type=str, default='ResNet', choices=['ResNet', 'ViT'], help='Model architecture to test (default: ResNet)')
     parser.add_argument('--data_dir', type=str, default='./data/test', help='Directory containing test data')
-    parser.add_argument('--pth_file', type=str, default='./model_best.pth', help='Path to the trained model file')
+    parser.add_argument('--pth_file', type=str, default='./model_best_ResNet.pth', help='Path to the trained model file')
     parser.add_argument('--inference', action='store_true', help='Whether to perform inference on a single image')
-    parser.add_argument('--image_path', type=str, default='./data/train/Arborio/Arborio (1).jpg', help='Path to the image for inference')
+    parser.add_argument('--image_path', type=str, default='./Ipsala.jpg', help='Path to the image for inference')
 
     return parser.parse_args()
 
@@ -153,8 +154,11 @@ if __name__ == '__main__':
     args = parse_args()
 
     # 将模型实例化
-    print('实例化模型')
-    model = ResNet18(Residual)
+    print(f'实例化模型: {args.model}')
+    if args.model == 'ResNet':
+        model = ResNet18(Residual)
+    else:
+        model = ViT()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('加载模型权重')
     model.load_state_dict(torch.load(args.pth_file, map_location=device))
@@ -169,7 +173,7 @@ if __name__ == '__main__':
     # 测试单张图片
     if args.inference:
         print('单张图片推理')
-        img = Image.open(args.image_path)
+        img = Image.open(args.image_path).convert('RGB')
         mean = np.load('mean.npy')
         std = np.load('std.npy')
         normalize = transforms.Normalize(mean=mean, std=std)
